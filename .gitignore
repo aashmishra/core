@@ -15,7 +15,7 @@ project/boot/
 
 #intellij IDE specific rules
 
-.idea/
+.idea/*
 project/target/
 project/project/target/
 spark-warehouse
