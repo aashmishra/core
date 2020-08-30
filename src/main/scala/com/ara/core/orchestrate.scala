@@ -1,5 +1,4 @@
-package com.dunnhumy.core
-
+package com.ara.core
 
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.types.{DateType, StringType, StructField, StructType}
