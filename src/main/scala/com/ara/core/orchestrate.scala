@@ -98,11 +98,4 @@ val  userinfoDF =differ.withColumn("datecolumn", col("timestamp").cast(DateType)
     parquet(destinationPath)
 }
 
-
-
-
-
-
-
-
 }
