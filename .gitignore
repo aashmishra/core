@@ -1,1 +1,22 @@
-target
+*.class
+*.log
+*.crc
+
+#SBT ignore rules
+.cache
+.history
+.lib/
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+/project/plugins/project/
+
+#intellij IDE specific rules
+
+.idea/
+project/target/
+project/project/target/
+spark-warehouse
+metastore_db

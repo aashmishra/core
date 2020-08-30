@@ -36,9 +36,8 @@ libraryDependencies ++= Seq(
 lazy val root = (project in file(".")).settings(
   test in assembly :={}
 )
-//
-//
-//assemblyMergeStrategy in assembly :={
-//  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
-//  case _ =>
-//}
+
+assemblyMergeStrategy in assembly:= {
+    case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+    case _ => MergeStrategy.first
+}
