@@ -1,4 +1,4 @@
-package com.dunnhumy.core.format.dataframe
+package com.ara.core.format.dataframe
 
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.spark.sql.{DataFrame, SQLContext}
