@@ -2,7 +2,7 @@ package com.ara.core.unittest.sampledataframe
 
 import java.sql.Date
 
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DateType, FloatType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 /**
@@ -48,6 +48,33 @@ object SampleDataFrame {
       StructField("last_name", StringType)
     )
     )
+
+    val row2Schema = StructType(
+      Array(
+        StructField("name", StringType),
+        StructField("revenue", FloatType)
+      )
+    )
+
+    val row3Schema = StructType(
+      Array(
+        StructField("department-information", ArrayType(row2Schema)),
+        StructField("department-number", IntegerType)
+      )
+    )
+
+    val sampleSchema = StructType(
+      Array(
+        StructField("id", StringType),
+        StructField("date", DateType),
+        StructField("name", ArrayType(row1Schema)),
+        StructField("department", ArrayType(row3Schema))
+      )
+    )
+
+
+    val sampleRdd = sqlContext.sparkContext.parallelize(outerRow)
+    sqlContext.createDataFrame(sampleRdd, sampleSchema)
 
   }
 
