@@ -15,7 +15,7 @@ trait SharedSparkSession extends FunSuite with BeforeAndAfterAll { this: Suite =
   @transient private var _sqlContext: SQLContext = _
 
   /**
-   * Get Spark Session
+   * Get Spark Session before start
    */
 
   override def beforeAll(): Unit = {
