@@ -27,11 +27,16 @@ libraryDependencies ++= Seq(
   "org.scalaz" %% "scalaz-core" % "7.2.22",
   "org.scalaz" %% "scalaz-effect" % "7.2.22",
   "org.scalaz" %% "scalaz-concurrent" % "7.2.22",
-  "org.scalactic" %% "scalactic" % "3.0.5",
-  "org.scalatest" %% "scalatest" % "3.0.5" % "test",
+  "org.scalactic" %% "scalactic" % "3.3.0-SNAP2",
+"org.scalatest" %% "scalatest" % "2.2.2" ,
+  "com.typesafe" % "config" % "1.3.1",
+  "org.scalaj" %% "scalaj-http" % "2.4.2",
   "joda-time" % "joda-time" % "2.10.4"
 )
 
+parallelExecution in Test := true
+
+testOptions in Test += Tests.Argument("-oD")
 
 lazy val root = (project in file(".")).settings(
   test in assembly :={}
