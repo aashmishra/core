@@ -11,7 +11,7 @@ import org.apache.spark.sql.types.{DateType, IntegerType, StringType, StructFiel
 import org.scalatest.FunSuite
 import com.ara.core.unittest.dataframe.DataFrameUtility.assertDataFrame
 
-class Transformation extends FunSuite with SharedSparkSession {
+class TransformationTest extends FunSuite with SharedSparkSession {
 
   test("TransformationTest - Add Literal Column") {
     val inputRDD = sc.parallelize(
