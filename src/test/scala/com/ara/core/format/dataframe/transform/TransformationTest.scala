@@ -16,7 +16,17 @@ class TransformationTest extends FunSuite with SharedSparkSession {
   test("TransformationTest - Add Literal Column") {
     val inputRDD = sc.parallelize(
       List(
-        Row.fromTuple("AD234", "kiran", "sahiba", 20, Date.valueOf("2020-09-06"))
+        Row.fromTuple("AD234", "kiran", "sahiba", 15, Date.valueOf("2005-09-06")),
+        Row.fromTuple("AD223", "Issa", "lenin", 30, Date.valueOf("1990-09-06")),
+        Row.fromTuple("AD294", "Jasmi", "xeba", 40, Date.valueOf("1980-09-06"))
+      )
+    )
+
+    val expectedRDD = sc.parallelize(
+      List(
+        Row.fromTuple("AD234", "kiran", "sahiba", 15, Date.valueOf("2005-09-06"), "Can't Smoke"),
+        Row.fromTuple("AD223", "Issa", "lenin", 30, Date.valueOf("1990-09-06"), "Allowed to smoke"),
+        Row.fromTuple("AD294", "Jasmi", "xeba", 40, Date.valueOf("1980-09-06"), "Allowed to smoke")
       )
     )
 
@@ -28,10 +38,25 @@ class TransformationTest extends FunSuite with SharedSparkSession {
         StructField("age", IntegerType),
         StructField("dob", DateType)
     ))
+
+    val expectedSchema = inputDataFrameSchema.add(StructField("category", StringType))
     val inputDF = sqlContext.createDataFrame(inputRDD, inputDataFrameSchema)
+    val expectedDF = sqlContext.createDataFrame(expectedRDD, expectedSchema)
     val literalConfig = List.empty[Config]
-    val actualDF = Transformation().addConditionalLiteralColumnDataFrame(inputDF, literalConfig)
+val conf =
+  """
+    |"conditionalLit" :[
+    |{"column" : "category",
+    |"filters":[
+    |{"condition": "age<18"
+    |"value" : "Can't Smoke"}
+    |],
+    |"defaultValue":"Allowed to smoke"}]
+    |""".stripMargin
+
+    val configr = ConfigFactory.parseString(conf).getConfigList("conditionalLit").asScala.toList
+    val actualDF = Transformation().addConditionalLiteralColumnDataFrame(inputDF, configr)
     actualDF.show(20, false)
-    assertDataFrame(actualDF, inputDF)
+    assertDataFrame(actualDF, expectedDF)
   }
 }
