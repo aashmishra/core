@@ -31,6 +31,7 @@ class TransformationTest extends FunSuite with SharedSparkSession {
     val inputDF = sqlContext.createDataFrame(inputRDD, inputDataFrameSchema)
     val literalConfig = List.empty[Config]
     val actualDF = Transformation().addConditionalLiteralColumnDataFrame(inputDF, literalConfig)
+    actualDF.show(20, false)
     assertDataFrame(actualDF, inputDF)
   }
 }

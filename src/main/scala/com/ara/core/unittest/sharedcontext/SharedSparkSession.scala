@@ -25,7 +25,7 @@ trait SharedSparkSession extends FunSuite with BeforeAndAfterAll { this: Suite =
     .appName("test")
     .master("local[*]")
     .enableHiveSupport()
-    .config("spark.sql.warehouse.dir", "./spark-warehouse")
+    .config("hive.exec.scratchdir","C:/tmp/hive")
     .getOrCreate()
     _sqlContext = _ss.sqlContext
     Logger.getLogger("org").setLevel(Level.ERROR)
