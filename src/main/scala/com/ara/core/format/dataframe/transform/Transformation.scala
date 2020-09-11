@@ -1,6 +1,7 @@
 package com.ara.core.format.dataframe.transform
 
 import java.sql.Date
+import java.text.SimpleDateFormat
 
 import scala.collection.JavaConverters._
 import org.apache.spark.sql.{Column, DataFrame}
@@ -240,10 +241,83 @@ class Transformation {
       s"Type of ${columnStructField.name} and $value does not match")
     }
   }
-  def forkColumnDataFrame(inputDF: DataFrame, forkConfig: Config):DataFrame = ???
-  def lowerCaseColumn(inputDF: DataFrame, toLowerCaseFlag: Boolean):DataFrame = ???
-  def modifyDatePattern(inputDF: DataFrame, config: Config):DataFrame = ???
-  def addExpressionColumnDatePattern(inputDF: DataFrame, expressionConfig: Config):DataFrame = ???
+
+  /**
+   *
+   * @param inputDF  DataFrame to add Fork Column
+   * @param forkConfig Json of Type
+   *                   { "columnA", "columnB",
+   *                   "columnC", "columnD"
+   *                   }
+   * @return output DataFrame with Forked Column
+   */
+  def forkColumnDataFrame(inputDF: DataFrame, forkConfig: Config):DataFrame = {
+    if(forkConfig.isEmpty){
+      inputDF
+    } else {
+      val columnName = forkConfig.root().entrySet().asScala.map(_.getKey)
+      val outputDF = columnName.foldLeft(inputDF){ (df,col)=>
+        df.withColumn(col, df(forkConfig.getString(col)))
+      }
+      outputDF
+    }
+
+  }
+  def lowerCaseColumn(inputDF: DataFrame, toLowerCaseFlag: Boolean):DataFrame = {
+    if(toLowerCaseFlag) {
+      val columnProjection = inputDF.schema.fields.map{ col=>
+        inputDF.col(col.name).as(col.name.toLowerCase())
+      }
+      inputDF.select(columnProjection: _*)
+    } else { inputDF }
+  }
+
+  def modifyDatePattern(inputDF: DataFrame, config: Config):DataFrame = {
+
+    val columns = config.root().keySet().asScala.toList
+    val modifyDatePatternUDF = udf((time: String, readPattern: String, writePattern: String)=>{
+
+      if (time ==null || time =="" || time=="null") {
+        time
+      } else {
+        val readFormat = new SimpleDateFormat(readPattern)
+        val writeFormat = new SimpleDateFormat(writePattern)
+        val readDate = readFormat.parse(time)
+        val outputRunTimeString = writeFormat.format(readDate)
+        outputRunTimeString
+      }
+    })
+
+    columns.foldLeft(inputDF) { (df, colName) =>
+      val columnConfig = config.getConfig(colName)
+      val readPattern = columnConfig.getString("readPattern")
+      val writePattern = columnConfig.getString("writePattern")
+      df.withColumn(colName, modifyDatePatternUDF(df(colName), lit(readPattern), lit(writePattern)))
+    }
+  }
+
+  /**
+   *
+   * @param inputDF Dataframe to do expression on select columns
+   * @param expressionConfig Json of Type
+   *                         { "column1": "cast(amount/10000000000 as DECIMAL(8,6))",
+   *                         "column2": "2"
+   *                         }
+   * @return DataFrame
+   */
+  def addExpressionColumnDatePattern(inputDF: DataFrame, expressionConfig: Config):DataFrame = {
+    if (expressionConfig.isEmpty) {
+      inputDF
+    } else {
+      val columnNameList = expressionConfig.root().entrySet().asScala.toList.map(_.getKey)
+      val outputDF = columnNameList.foldLeft(inputDF){(df, col) =>
+        df.withColumn(col, exp(expressionConfig.getString(col)))
+      }
+      outputDF.sqlContext.createDataFrame(outputDF.rdd, StructType(outputDF.schema.map(_.copy(nullable = true))))
+    }
+
+  }
+
 }
 object Transformation{
   def apply(): Transformation = new Transformation()
