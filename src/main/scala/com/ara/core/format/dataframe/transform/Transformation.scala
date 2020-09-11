@@ -1,10 +1,12 @@
 package com.ara.core.format.dataframe.transform
 
+import java.sql.Date
+
 import scala.collection.JavaConverters._
 import org.apache.spark.sql.{Column, DataFrame}
 import com.typesafe.config.Config
-import org.apache.spark.sql.functions.{col, column, expr, lit, when}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 class Transformation {
 
@@ -161,8 +163,83 @@ class Transformation {
    * @param filterConfigList
    * @return
    */
-  def getFilteredDataFrame(inputDF: DataFrame, filterConfigList: List[Config]):DataFrame = ???
-  def castValueDataType(columnStructField: StructField, value: String):DataFrame = ???
+  def getFilteredDataFrame(inputDF: DataFrame, filterConfigList: List[Config]):DataFrame = {
+    if (filterConfigList.isEmpty) {
+      inputDF
+    } else {
+      val filterQuery = filterConfigList.map{ config =>
+        val operator =  config.getString("operator")
+        val leftColumnName = config.getString("left_column")
+        val columnStructField = inputDF.schema.find(structField=>
+          structField.name.toLowerCase() ==leftColumnName.toLowerCase).getOrElse(
+          throw new IllegalArgumentException(s"${getClass.getSimpleName} $leftColumnName. is not present in dataframe")
+        )
+
+        val dfCol = if (config.hasPath("substr")) {
+          val subs = config.getIntList("substr").asScala.toList
+          inputDF(leftColumnName).substr(subs.head, subs(1))
+        }
+        else {
+          inputDF(leftColumnName)
+        }
+
+        val x = if(config.hasPath("valueList")){
+          lazy val valueList = config.getStringList("valueList").asScala.toList.map(castValueDataType(columnStructField, _))
+         operator match {
+            case "not in" => !dfCol.isin(valueList: _*)
+            case "in" =>  dfCol.isin(valueList: _*)
+            case _ => throw new IllegalArgumentException(s"${getClass.getSimpleName} $operator. is not supported")
+          }
+        }
+        else {
+          val castValue = if(config.hasPath("value")){
+            val value = config.getString("value")
+            castValueDataType(columnStructField, value)
+          }
+          else {
+            val rightColumn = config.getString("right_column")
+            inputDF(rightColumn)
+          }
+
+          operator match {
+            case ">" => dfCol.gt(castValue)
+            case ">=" => dfCol.geq(castValue)
+            case "<" => dfCol.lt(castValue)
+            case "<=" => dfCol.leq(castValue)
+            case "=" | "=="  => dfCol === castValue
+            case "!=" | "=!=" | "<>" => dfCol.notEqual(castValue)
+            case "<=>" => dfCol <=> castValue
+            case "!<=>" => dfCol.isNull || (dfCol =!= castValue)
+            case "not null" => dfCol.isNotNull
+            case "like" => dfCol.like(castValue.asInstanceOf[String])
+            case _ => throw new IllegalArgumentException(s"${getClass.getSimpleName} $operator. is not supported")
+
+          }
+        }
+       x
+      }.reduce(_ && _)
+      inputDF.filter(filterQuery)
+    }
+  }
+  private def castValueDataType(columnStructField: StructField, value: String):Any = {
+    val dataType = columnStructField.dataType
+    try {
+      dataType match {
+        case DateType => Date.valueOf(value)
+        case BooleanType => value.toBoolean
+        case FloatType => value.toFloat
+        case LongType => value.toLong
+        case DoubleType => value.toDouble
+        case IntegerType => value.toInt
+        case StringType => String.valueOf(value)
+        }
+    }
+    catch {
+      case _ : MatchError => throw new IllegalArgumentException(s"${getClass.getSimpleName} $dataType. is not supported")
+      case _ : Throwable => throw new IllegalArgumentException(s"${getClass.getSimpleName} $dataType. " +
+      s"Type of ${columnStructField.name} and $value does not match")
+    }
+  }
   def forkColumnDataFrame(inputDF: DataFrame, forkConfig: Config):DataFrame = ???
   def lowerCaseColumn(inputDF: DataFrame, toLowerCaseFlag: Boolean):DataFrame = ???
   def modifyDatePattern(inputDF: DataFrame, config: Config):DataFrame = ???
