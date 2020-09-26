@@ -10,7 +10,42 @@ class CSVDataFrameReadWriteFormat(_config: Config) extends FileDataFrameReadWrit
 
   override val config: Config = _config
 
-  override def readDataFrame(sqlContext: SQLContext): DataFrame = ???
+  override def readDataFrame(sqlContext: SQLContext): DataFrame = {
+
+    val optionConfig = config.getConfig("option")
+    val filePath = optionConfig.getString("path")
+    val resourceFile = if(optionConfig.hasPath("resource")) {
+      optionConfig.getBoolean("resource")
+    } else {
+      false
+    }
+    val updatedFilePath = if(resourceFile){
+      getClass.getResource(filePath).getFile
+    } else {
+      filePath
+    }
+    val optionMap = optionConfig.entrySet().asScala.toList.map{
+      entry => (entry.getKey, entry.getValue.unwrapped().toString)
+    }.toMap
+
+    val readDF = sqlContext.read.format("com.databricks.spark.csv").options(optionMap).load(updatedFilePath)
+
+    val formattedDF = formatDataFrame(readDF)
+    val selectedColumnsDF = if(optionConfig.hasPath("columnNames") && !optionConfig.getStringList("columnNames").isEmpty) {
+      val columnNameList = optionConfig.getStringList("columnNames").asScala.toList
+      addHeader(formattedDF.select(columnNameList.head, columnNameList.tail: _*))
+    } else {
+      addHeader(formattedDF)
+    }
+
+    if(optionConfig.hasPath("limit")){
+      val limitRead = optionConfig.getInt("limit")
+      selectedColumnsDF.limit(limitRead)
+    } else {
+      selectedColumnsDF
+    }
+
+  }
 
   override def writeDataFrame(inputDF: DataFrame): Unit = {
     val formatDF = formatDataFrame(inputDF)
@@ -98,8 +133,6 @@ class CSVDataFrameReadWriteFormat(_config: Config) extends FileDataFrameReadWrit
     mergeSparkFiles(inputDF.sparkSession)
     renameSparkFiles(inputDF.sparkSession)
   }
-
-
 
 }
 
