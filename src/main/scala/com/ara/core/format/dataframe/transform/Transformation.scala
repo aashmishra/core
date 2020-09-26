@@ -263,8 +263,8 @@ class Transformation {
     }
 
   }
-  def lowerCaseColumn(inputDF: DataFrame, toLowerCaseFlag: Boolean):DataFrame = {
-    if(toLowerCaseFlag) {
+  def lowerCaseColumn(inputDF: DataFrame, toLowerCaseConfig: Config):DataFrame = {
+    if(toLowerCaseConfig.getBoolean("toLowerCase")) {
       val columnProjection = inputDF.schema.fields.map{ col=>
         inputDF.col(col.name).as(col.name.toLowerCase())
       }
