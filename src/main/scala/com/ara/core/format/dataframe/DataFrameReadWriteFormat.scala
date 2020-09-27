@@ -1,12 +1,13 @@
 package com.ara.core.format.dataframe
 
 import com.typesafe.config.{Config, ConfigFactory}
-import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
 import com.ara.core.format.dataframe.file.FileDataFrameReadWriteFormat
 import com.ara.core.format.dataframe.table.HiveTableReadWriteFormat
 import com.ara.core.format.dataframe.utils.helpers
 import com.ara.core.format.dataframe.transform._
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 import scala.collection.JavaConverters._
 
@@ -84,7 +85,93 @@ object DataFrameReadWriteFormat{
  }
 
  def mergeSparkFiles(config: Config,spark: SparkSession):Unit = {
+  if(config.hasPath("mergeFiles")) {
+   val mergeConfig = config.getConfig("mergeFiles")
+   val path = config.getString("path")
+   val mergeCmd = mergeConfig.getString("mergeCmd")
+   val prependHeader = if (mergeConfig.hasPath("prependHeader")) {
+    Some(mergeConfig.getStringList("prependHeader").asScala)
+   } else { None }
+   val fs = new Path(path).getFileSystem(spark.sparkContext.hadoopConfiguration)
+   val headerPath = if (prependHeader.isDefined && prependHeader.get.nonEmpty) {
+    val hed = mergeConfig.getStringList("prependHeader").asScala
+    val RDD = spark.sparkContext.parallelize(Seq(Row.fromSeq(hed)))
+    val schema = StructType(hed.map(x=> StructField(x, StringType)).toArray)
+    val optionMap = mergeConfig.getConfig("option").entrySet().asScala.toList.map {
+     entry => (entry.getKey, entry.getValue.unwrapped().toString)
+    }.toMap
 
+    spark.createDataFrame(RDD, schema).repartition(1).write.mode("overwrite").options(optionMap).csv(path + "/header")
+
+    fs.globStatus(new Path(path + "/header/part*")).map(_.getPath.toString).toList.filter(x=>x.endsWith("csv.gz") || x.endsWith("csv")).head
+   } else { "" }
+
+   val deleteSource = !mergeConfig.hasPath("deleteSource") ||
+     (mergeConfig.hasPath("deleteSource") && mergeConfig.getBoolean("deleteSource"))
+
+   val files = fs.globStatus(new Path(path + "/part*")).map(_.getClass.toString).toList
+   if( files.isEmpty) {
+    val dirs = fs.globStatus(new Path(path + "/*")).map(_.getClass.toString).toList.filterNot(_.endsWith("header"))
+    dirs.foreach { dir =>
+      val internalPathString = s"${path}/$dir"
+      val internalFiles = fs.globStatus(new Path(s"${internalPathString}/part*")).map(_.getPath.toString).toList
+      if((internalFiles.size>1) ||
+     (internalFiles.nonEmpty && prependHeader.isDefined && prependHeader.get.nonEmpty)) {
+      val sourceFiles = if(prependHeader.isDefined && prependHeader.get.nonEmpty) {
+       FileUtil.copy(fs, new Path(headerPath), fs,
+       new Path(internalPathString + "/" + headerPath.split("/").last),
+       false, true, spark.sparkContext.hadoopConfiguration)
+
+
+       val headerFile = fs.globStatus(new Path(internalPathString + "/" + headerPath.split("/").last)).
+       map(_.getPath.toString).head
+       (headerFile +: internalFiles).mkString(" ")
+      } else {
+       internalFiles.mkString(" ")
+      }
+
+       val targetFile = sourceFiles.split(" ").head
+       val cmd = s"$mergeCmd $sourceFiles $targetFile"
+       import sys.process._
+       val result = Process(cmd).run().exitValue()
+
+       Thread.sleep(1000)
+       if(deleteSource && result == 0){
+        sourceFiles.split(" ").tail.foreach{ file=> fs.delete(new Path(file), false)}
+       }
+     }
+
+    }
+   }
+   else if (files.size>1 ||(prependHeader.isDefined && prependHeader.get.nonEmpty)) {
+    val internalFiles = files
+    val sourceFiles = if(prependHeader.isDefined && prependHeader.get.nonEmpty) {
+     FileUtil.copy(fs, new Path(headerPath), fs,
+      new Path(path + "/" + headerPath.split("/").last),
+      false, true, spark.sparkContext.hadoopConfiguration)
+
+
+     val headerFile = fs.globStatus(new Path(path + "/" + headerPath.split("/").last)).
+       map(_.getPath.toString).head
+     (headerFile +: internalFiles).mkString(" ")
+    } else {
+     internalFiles.mkString(" ")
+    }
+    val targetFile = sourceFiles.split(" ").head
+    val cmd = s"$mergeCmd $sourceFiles $targetFile"
+    import sys.process._
+    val result = Process(cmd).run().exitValue()
+
+    Thread.sleep(1000)
+    if(deleteSource && result == 0){
+     sourceFiles.split(" ").tail.foreach{ file=> fs.delete(new Path(file), false)}
+    }
+   }
+   if(prependHeader.isDefined && prependHeader.get.nonEmpty) {
+    fs.delete(new Path(path + "/header"), true)
+   }
+
+  }
  }
 
  def renameSparkFiles(config: Config,spark: SparkSession):Unit = {
