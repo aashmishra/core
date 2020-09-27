@@ -129,9 +129,6 @@ class ParquetDataFrameReadWriteFormat(_config: Config) extends FileDataFrameRead
       .mode(saveMode)
       .partitionBy(partitions: _*)
       .parquet(filePath)
-
-    mergeSparkFiles(inputDF.sparkSession)
-    renameSparkFiles(inputDF.sparkSession)
   }
 
 }
