@@ -175,7 +175,81 @@ object DataFrameReadWriteFormat{
  }
 
  def renameSparkFiles(config: Config,spark: SparkSession):Unit = {
+  if (config.hasPath("renameSparkFiles")) {
+   val renameSparkFilesConfig = config.getConfig("renameSparkFiles")
+   val fileName = renameSparkFilesConfig.getString("filePattern")
+   val rawPath = renameSparkFilesConfig.getString("path")
 
+   val path = if (rawPath.last == '/') rawPath.dropRight(1) else rawPath
+   val fileExtension = renameSparkFilesConfig.getString("fileExtension")
+   val dotCompleteFlag = renameSparkFilesConfig.getBoolean("dotCompleteFlag")
+   val fs = new Path(path).getFileSystem(spark.sparkContext.hadoopConfiguration)
+
+   val files = fs.globStatus(new Path(path + "/part*")).map(_.getClass.toString).toList
+   if (files.isEmpty) {
+    val dirs = fs.globStatus(new Path(path + "/*")).map(_.getClass.toString).toList
+    if (dirs.nonEmpty) {
+     dirs.foreach { dir =>
+      val internalPathString = s"${path}/$dir"
+      val partitionedCol = dir.split("=").last
+      val internalFiles = fs.globStatus(new Path(s"${internalPathString}/part*")).map(_.getPath.toString).toList
+      if (internalFiles.size == 1) {
+       val srcPath = new Path(internalPathString + s"${internalFiles.head}")
+       val splittedPath = internalPathString.split('/')
+       val modPath = splittedPath.take(splittedPath.length - 2).mkString("/")
+       val renamePath = new Path(s"${modPath}/${fileName}_${partitionedCol}.$fileExtension")
+       fs.rename(srcPath, renamePath)
+       if (dotCompleteFlag) {
+        createCompleteFile(renamePath.toString, fs)
+       }
+      } else {
+       val zippedFilesList = internalFiles.zipWithIndex
+       zippedFilesList.foreach {
+        case (partFile, index) =>
+         val initialPath = new Path(s"$internalPathString/$partFile")
+         println(s"initialPath => $initialPath")
+         val splittedPath = internalPathString.split('/')
+         val modPath = splittedPath.take(splittedPath.length - 2).mkString("/")
+         val renamePath = new Path(s"${modPath}/${fileName}_${partitionedCol}_${index + 1}.$fileExtension")
+         println(s"renamePath => $renamePath")
+         fs.rename(initialPath, renamePath)
+         if (dotCompleteFlag) {
+          createCompleteFile(renamePath.toString, fs)
+         }
+       }
+      }
+     }
+    }
+   }
+   else if (files.size == 1) {
+    val srcPath = new Path(path + s"/${files.head}")
+    val splittedPath = path.split('/')
+    val modPath = splittedPath.take(splittedPath.length - 1).mkString("/")
+    val renamePath = new Path(s"${modPath}/${fileName}.$fileExtension")
+    println(s"renamePath => $renamePath")
+    fs.rename(srcPath, renamePath)
+    if (dotCompleteFlag) {
+     createCompleteFile(renamePath.toString, fs)
+    }
+   } else {
+    val zippedFilesList = files.zipWithIndex
+    zippedFilesList.foreach {
+     case (partFile, index) =>
+      val initialPath = new Path(s"$path/$partFile")
+      println(s"initialPath => $initialPath")
+      val splittedPath = path.split('/')
+      val modPath = splittedPath.take(splittedPath.length - 1).mkString("/")
+      val renamePath = new Path(s"${modPath}/${fileName}_${index + 1}.$fileExtension")
+      println(s"renamePath => $renamePath")
+      fs.rename(initialPath, renamePath)
+      if (dotCompleteFlag) {
+       createCompleteFile(renamePath.toString, fs)
+      }
+
+    }
+   }
+   fs.delete(new Path(path), true)
+  }
  }
 
  def createCompleteFile(path:String, fs:FileSystem,Suffix:String = ".complete"): Unit ={
